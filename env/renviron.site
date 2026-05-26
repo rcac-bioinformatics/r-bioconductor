@@ -24,7 +24,11 @@ R_LIBS_USER=${R_LIBS_USER-~/R/x86_64-pc-linux-gnu-library/%v}
 # Shared site library: centrally managed by HPC staff
 # This path is bind-mounted into the container from shared storage.
 # The Bioconductor suffix prevents version conflicts between releases.
-R_LIBS_SITE=${R_LIBS_SITE-/apps/biocontainers/extras/r-package-site-library/%v-bioconductor}
+#
+# The container's own site-library is appended so that packages installed
+# during the Docker build (BiocManager, tidyverse, etc.) are always visible,
+# even when R_LIBS_SITE points to an HPC path.
+R_LIBS_SITE=${R_LIBS_SITE-/apps/biocontainers/extras/r-package-site-library/%v-bioconductor}:/usr/local/lib/R/site-library
 
 # Ensure the user library directory exists on first use.
 # R will attempt to create it, but setting this avoids interactive prompts.

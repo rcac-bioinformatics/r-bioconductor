@@ -53,6 +53,9 @@ FROM rocker/r-ver:${R_VERSION}
 ARG R_VERSION
 ARG BIOC_VERSION
 ARG RSTUDIO_VERSION
+# Docker does not support bash parameter expansion (${VAR%.*}), so
+# R_VERSION_SHORT must be a separate build arg.
+ARG R_VERSION_SHORT=4.6
 
 # ---------------------------------------------------------------------------
 # OCI / Docker labels for provenance tracking
@@ -68,20 +71,17 @@ LABEL org.opencontainers.image.title="Bioconductor HPC (RStudio Desktop)" \
       com.hpc.target="apptainer"
 
 # ---------------------------------------------------------------------------
-# Environment: configure R library paths for HPC
+# Environment: metadata only
 #
-# R_LIBS_USER: per-user writable library (on the host filesystem)
-# R_LIBS_SITE: shared site library (bind-mounted from HPC shared storage)
-#
-# The site library path uses a Bioconductor-versioned directory so that
-# different Bioconductor releases do not share incompatible packages.
+# R_LIBS_USER and R_LIBS_SITE are NOT set here. They are configured in
+# Renviron.site (for R sessions) and profile.d/bioc.sh (for shells).
+# Setting them as Docker ENV would redirect R's library path away from the
+# container's own site-library during the build, hiding packages installed
+# in earlier layers.
 # ---------------------------------------------------------------------------
-ENV R_VERSION_SHORT=${R_VERSION%.*} \
+ENV R_VERSION_SHORT=${R_VERSION_SHORT} \
     BIOC_VERSION=${BIOC_VERSION} \
     RSTUDIO_VERSION=${RSTUDIO_VERSION}
-
-ENV R_LIBS_USER='~/R/x86_64-pc-linux-gnu-library/${R_VERSION_SHORT}' \
-    R_LIBS_SITE='/apps/biocontainers/extras/r-package-site-library/${R_VERSION_SHORT}-bioconductor'
 
 # Prevent interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive

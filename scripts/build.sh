@@ -26,10 +26,13 @@ fi
 # ---------------------------------------------------------------------------
 # Configurable variables (override via environment)
 # ---------------------------------------------------------------------------
-BIOC_VERSION="${BIOC_VERSION:-3.21}"
-R_VERSION="${R_VERSION:-4.5.0}"
+BIOC_VERSION="${BIOC_VERSION:-3.23}"
+R_VERSION="${R_VERSION:-4.6.0}"
 UBUNTU_VERSION="${UBUNTU_VERSION:-noble}"
-RSTUDIO_VERSION="${RSTUDIO_VERSION:-2025.05.0-496}"
+RSTUDIO_VERSION="${RSTUDIO_VERSION:-2026.05.0-218}"
+# R_VERSION_SHORT: major.minor (e.g., "4.6") — Docker can't compute this
+# from R_VERSION, so we derive it here in bash and pass as a build arg.
+R_VERSION_SHORT="${R_VERSION%.*}"
 IMAGE_NAME="${IMAGE_NAME:-bioconductor-hpc}"
 IMAGE_TAG="${IMAGE_TAG:-${BIOC_VERSION}}"
 
@@ -70,6 +73,7 @@ echo "============================================================"
 
 docker build \
     --build-arg R_VERSION="${R_VERSION}" \
+    --build-arg R_VERSION_SHORT="${R_VERSION_SHORT}" \
     --build-arg UBUNTU_VERSION="${UBUNTU_VERSION}" \
     --build-arg BIOC_VERSION="${BIOC_VERSION}" \
     --build-arg RSTUDIO_VERSION="${RSTUDIO_VERSION}" \
