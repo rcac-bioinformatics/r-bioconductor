@@ -1,54 +1,104 @@
-#%Module1.0
-########################################################################
-# Example modulefile for Bioconductor HPC Container
-#
-# This is a READY-TO-USE modulefile with default paths. For production,
-# use install_module.sh to generate a modulefile from templates with
-# site-specific paths substituted.
-#
-# Installation:
-#   cp modulefiles/bioconductor /apps/modulefiles/bioconductor/3.21
-#   Or: ./scripts/install_module.sh
-########################################################################
+-- Example Lmod modulefile for Bioconductor HPC Container
+--
+-- This is a READY-TO-USE modulefile with default paths baked in.
+-- For production, use install_module.sh to generate from templates
+-- with site-specific paths substituted.
+--
+-- Installation:
+--   cp modulefiles/bioconductor /apps/modulefiles/bioconductor/3.23.lua
+--   Or: ./scripts/install_module.sh
 
-proc ModulesHelp { } {
-    puts stderr "Bioconductor 3.21 with R 4.5.0 and RStudio Desktop"
-    puts stderr ""
-    puts stderr "Commands: R, Rscript, rstudio, bioc-shell"
-    puts stderr ""
-    puts stderr "Package libraries:"
-    puts stderr "  User: ~/R/x86_64-pc-linux-gnu-library/4.5"
-    puts stderr "  Site: /apps/biocontainers/extras/r-package-site-library/4.5-bioconductor"
-}
+help([==[
+R 4.6.0 with Bioconductor 3.23 and RStudio Desktop for HPC.
 
-module-whatis "Bioconductor 3.21 with R 4.5.0 and RStudio Desktop for HPC"
+Commands: R, Rscript, rstudio
+User library: ~/R/x86_64-pc-linux-gnu-library/4.6
+Site library: /apps/biocontainers/extras/r-package-site-library/4.6-bioconductor
+]==])
 
-conflict bioconductor
-conflict R
+whatis("Name:         r-bioconductor")
+whatis("Version:      3.23")
+whatis("Description:  R 4.6.0 with Bioconductor 3.23 and RStudio Desktop IDE for HPC")
 
-set image_path "/apps/biocontainers/images/bioconductor-hpc-3.21.sif"
-set bind_paths "/apps/biocontainers/extras,/scratch"
+if not (os.getenv("BIOC_SINGULARITY_MODULE") == "none") then
+   local singularity_module = os.getenv("BIOC_SINGULARITY_MODULE") or "Singularity"
+   if not (isloaded(singularity_module)) then
+      load(singularity_module)
+   end
+end
 
-setenv BIOC_VERSION    "3.21"
-setenv R_VERSION       "4.5.0"
-setenv R_VERSION_SHORT "4.5"
-setenv R_LIBS_USER     "$env(HOME)/R/x86_64-pc-linux-gnu-library/4.5"
-setenv R_LIBS_SITE     "/apps/biocontainers/extras/r-package-site-library/4.5-bioconductor"
-setenv QT_X11_NO_MITSHM "1"
-setenv QT_QPA_PLATFORM  "xcb"
+conflict(myModuleName(), "R", "R-bioconductor", "Rstudio", "r", "rstudio", "r-rstudio", "r-rnaseq")
 
-if { [info exists env(USER)] } {
-    setenv TMPDIR "/scratch/$env(USER)/tmp"
-}
+local image = "r-bioconductor_3.23-R-4.6.0.sif"
+local singularity = capture("which singularity 2>/dev/null || which apptainer 2>/dev/null | head -c -1")
 
-set apptainer_exec "apptainer exec --bind $bind_paths $image_path"
+if (os.getenv("BIOC_IMAGE_DIR")) then
+   image = pathJoin(os.getenv("BIOC_IMAGE_DIR"), image)
+   if not (isFile(image)) then
+      if (mode() == "load") then
+         LmodMessage("file not found: " .. image)
+      end
+   end
+else
+   image = pathJoin("/apps/biocontainers/images", image)
+end
 
-set-alias R        "$apptainer_exec R"
-set-alias Rscript  "$apptainer_exec Rscript"
-set-alias rstudio  "$apptainer_exec launch-rstudio"
-set-alias bioc-shell "$apptainer_exec bash"
+local run_args = {}
+if (capture("nvidia-smi -L 2>/dev/null") ~= "") then
+   if (mode() == "load") then
+      LmodMessage("BIOC: Enabling Nvidia GPU support in the container.")
+   end
+   table.insert(run_args, "--nv")
+end
+if (capture("/opt/rocm/bin/rocm-smi -i 2>/dev/null | grep ^GPU") ~= "") then
+   if (mode() == "load") then
+      LmodMessage("BIOC: Enabling AMD GPU support in the container.")
+   end
+   table.insert(run_args, "--rocm")
+end
 
-if { [module-info mode load] } {
-    puts stderr "Bioconductor 3.21 loaded (R 4.5.0, RStudio Desktop)"
-    puts stderr "  Commands: R, Rscript, rstudio, bioc-shell"
-}
+local container_launch = singularity .. " run " .. table.concat(run_args, " ") .. " " .. image
+
+for _,program in pairs({"R", "Rscript"}) do
+    set_shell_function(program, container_launch .. " " .. program .. " \"$@\"",
+                                container_launch .. " " .. program .. " $*")
+end
+set_shell_function("rstudio", container_launch .. " rstudio --no-sandbox \"$@\"",
+                              container_launch .. " rstudio --no-sandbox $*")
+
+append_path("APPTAINER_BIND", "/apps/biocontainers/extras", ",")
+append_path("APPTAINER_BIND", "/var/opt",  ",")
+append_path("APPTAINER_BIND", "/run/user", ",")
+append_path("APPTAINER_BIND", "/usr/share/fonts", ",")
+
+setenv("BIOC_VERSION",    "3.23")
+setenv("R_VERSION",       "4.6.0")
+setenv("R_VERSION_SHORT", "4.6")
+setenv("R_LIBS_SITE", "/apps/biocontainers/extras/r-package-site-library/4.6-bioconductor")
+setenv("R_LIBS_USER", pathJoin(os.getenv("HOME") or "", "R/x86_64-pc-linux-gnu-library/4.6"))
+setenv("QT_X11_NO_MITSHM", "1")
+setenv("QT_QPA_PLATFORM",  "xcb")
+
+pushenv("APPTAINERENV_CC",  "")
+pushenv("APPTAINERENV_CXX", "")
+pushenv("APPTAINERENV_FC",  "")
+pushenv("APPTAINERENV_F77", "")
+pushenv("APPTAINERENV_F90", "")
+pushenv("APPTAINERENV_F95", "")
+
+if (mode() == "load") then
+    if os.getenv("OMP_NUM_THREADS") == nil then
+        setenv("OMP_NUM_THREADS", "1")
+    end
+    if os.getenv("OPENBLAS_NUM_THREADS") == nil then
+        setenv("OPENBLAS_NUM_THREADS", "1")
+    end
+end
+
+local user = os.getenv("USER") or "unknown"
+setenv("TMPDIR", pathJoin("/scratch", user, "tmp"))
+
+if (mode() == "load") then
+    LmodMessage("Bioconductor 3.23 loaded (R 4.6.0, RStudio Desktop)")
+    LmodMessage("  Commands: R, Rscript, rstudio")
+end
