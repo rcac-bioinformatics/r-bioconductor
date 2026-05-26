@@ -1,0 +1,117 @@
+##############################################################################
+# Apptainer Definition File
+#
+# Builds the Bioconductor HPC container directly from a Docker registry.
+# Use this when Docker is not available on the build machine (common on
+# HPC login nodes).
+#
+# Usage:
+#   apptainer build bioconductor-hpc-3.21.sif apptainer/apptainer.def
+#
+# Or with the helper script:
+#   ./scripts/build_apptainer.sh --def
+#
+# NOTE: If you have Docker available, it is usually faster to:
+#   1. Build the Docker image: ./scripts/build.sh
+#   2. Convert: ./scripts/build_apptainer.sh
+#
+# This .def file pulls from Docker Hub. If your organization pushes the
+# Docker image to a private registry, update the From: line below.
+##############################################################################
+
+Bootstrap: docker
+From: bioconductor-hpc:3.21
+
+%labels
+    Author HPC Team
+    Description Bioconductor with RStudio Desktop for HPC
+    BioconductorVersion 3.21
+    RVersion 4.5.0
+
+%help
+    Bioconductor HPC Container
+    ==========================
+    Bioconductor 3.21 with R 4.5.0 and RStudio Desktop.
+
+    Designed for HPC environments using Apptainer/Singularity.
+
+    Quick start:
+      R                                    # Interactive R session
+      Rscript script.R                     # Run an R script
+      launch-rstudio                       # Start RStudio Desktop (needs X11)
+
+    Examples:
+      apptainer exec bioconductor-hpc.sif R
+      apptainer exec bioconductor-hpc.sif Rscript -e "library(GenomicRanges)"
+      apptainer exec bioconductor-hpc.sif launch-rstudio
+
+    Library paths:
+      User:   ~/R/x86_64-pc-linux-gnu-library/4.5
+      Site:   /apps/biocontainers/extras/r-package-site-library/4.5-bioconductor
+
+%environment
+    ##########################################################################
+    # Environment variables available in every exec/shell/run invocation.
+    #
+    # These mirror the settings in env/profile.d/bioc.sh but are set via
+    # Apptainer's native %environment mechanism, which works for both
+    # login and non-login shells.
+    ##########################################################################
+
+    export LANG=en_US.UTF-8
+    export LC_ALL=en_US.UTF-8
+
+    export R_VERSION_SHORT=4.5
+    export BIOC_VERSION=3.21
+
+    # R library paths
+    export R_LIBS_USER="${HOME}/R/x86_64-pc-linux-gnu-library/4.5"
+    export R_LIBS_SITE="/apps/biocontainers/extras/r-package-site-library/4.5-bioconductor"
+
+    # TMPDIR — prefer scratch over /tmp for large temporary files.
+    # Users can override this in their shell or SLURM script.
+    if [ -d "/scratch/${USER}" ]; then
+        export TMPDIR="/scratch/${USER}/tmp"
+        mkdir -p "${TMPDIR}" 2>/dev/null || true
+    fi
+
+    # Qt/X11 settings for RStudio Desktop inside containers
+    export QT_X11_NO_MITSHM=1
+    export QT_QPA_PLATFORM=xcb
+    export QT_ACCESSIBILITY=0
+    export NO_AT_BRIDGE=1
+
+%runscript
+    ##########################################################################
+    # Default action for: apptainer run bioconductor-hpc.sif
+    #
+    # Starts an interactive R session. Pass arguments to R:
+    #   apptainer run bioconductor-hpc.sif --no-save
+    ##########################################################################
+    exec R "$@"
+
+%test
+    ##########################################################################
+    # Post-build tests — run automatically after build.
+    # Tests basic functionality without requiring X11.
+    ##########################################################################
+
+    echo "=== Container self-test ==="
+
+    # R is functional
+    R --version || exit 1
+    echo "PASS: R --version"
+
+    # BiocManager is installed
+    Rscript -e "library(BiocManager); cat('BiocManager version:', as.character(BiocManager::version()), '\n')" || exit 1
+    echo "PASS: BiocManager"
+
+    # Core packages load
+    Rscript -e "library(GenomicRanges); cat('GenomicRanges OK\n')" || exit 1
+    echo "PASS: GenomicRanges"
+
+    # RStudio binary exists
+    test -x /usr/lib/rstudio/rstudio || exit 1
+    echo "PASS: RStudio binary"
+
+    echo "=== All tests passed ==="

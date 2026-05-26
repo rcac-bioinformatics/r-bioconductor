@@ -1,0 +1,29 @@
+# Container images
+*.sif
+*.img
+*.simg
+*.tar
+*.tar.gz
+
+# Build artifacts
+.build/
+tmp/
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# R artifacts
+.Rhistory
+.RData
+.Rproj.user
+
+# Logs
+*.log

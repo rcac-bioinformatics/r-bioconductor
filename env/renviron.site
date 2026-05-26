@@ -1,0 +1,44 @@
+##############################################################################
+# Renviron.site — System-wide R environment variables
+#
+# This file is sourced by every R session started inside this container.
+# It configures library paths so that:
+#   1. User packages (R_LIBS_USER) are checked first — user installs override
+#   2. Site packages (R_LIBS_SITE) are checked second — shared installs
+#   3. Container packages (R_HOME/library) are checked last — base packages
+#
+# Under Apptainer, R_LIBS_USER resolves to a writable directory on the
+# host filesystem (the user's home directory). R_LIBS_SITE is bind-mounted
+# from shared HPC storage so all users on the cluster share one set of
+# curated site packages.
+#
+# IMPORTANT: Do not set R_LIBS here — it overrides both USER and SITE.
+# Use R_LIBS_USER and R_LIBS_SITE to keep the layered resolution order.
+##############################################################################
+
+# Per-user library: ~/R/x86_64-pc-linux-gnu-library/<R_major.minor>
+# This is the default R convention. Users can install packages here with
+# install.packages() or BiocManager::install() without root access.
+R_LIBS_USER=${R_LIBS_USER-~/R/x86_64-pc-linux-gnu-library/%v}
+
+# Shared site library: centrally managed by HPC staff
+# This path is bind-mounted into the container from shared storage.
+# The Bioconductor suffix prevents version conflicts between releases.
+R_LIBS_SITE=${R_LIBS_SITE-/apps/biocontainers/extras/r-package-site-library/%v-bioconductor}
+
+# Ensure the user library directory exists on first use.
+# R will attempt to create it, but setting this avoids interactive prompts.
+R_LIBS_USER_CREATE=TRUE
+
+# CRAN mirror — use the RStudio/Posit public mirror for speed and reliability.
+# Individual users can override this in their personal ~/.Renviron.
+CRAN=https://cloud.r-project.org
+
+# Locale — ensure consistent encoding across all sessions
+LANG=en_US.UTF-8
+LC_ALL=en_US.UTF-8
+
+# Disable R's built-in HTTP user agent string that leaks version info
+# (minor security hardening for HPC environments)
+R_BROWSER=false
+R_PDFVIEWER=false

@@ -1,0 +1,74 @@
+##############################################################################
+# Rprofile.site — System-wide R startup code
+#
+# Executed by every R session after Renviron.site is read. This file
+# configures the default Bioconductor repository and creates the user
+# library directory if it does not exist.
+#
+# DESIGN PRINCIPLE: Keep this minimal. Heavy startup code slows down
+# every R invocation including Rscript calls. Only put things here that
+# MUST run at startup.
+##############################################################################
+
+# ---------------------------------------------------------------------------
+# Ensure user library directory exists
+#
+# Under Apptainer, the home directory is bind-mounted from the host.
+# The user library path may not exist yet on the host filesystem.
+# We create it silently to avoid the interactive "create directory?" prompt.
+# ---------------------------------------------------------------------------
+local({
+    lib_user <- Sys.getenv("R_LIBS_USER")
+    # Expand the path (replace ~ and %v)
+    lib_user <- gsub("%v", paste(R.version$major, sub("\\..*", "", R.version$minor), sep = "."), lib_user)
+    lib_user <- path.expand(lib_user)
+    if (!dir.exists(lib_user)) {
+        dir.create(lib_user, recursive = TRUE, showWarnings = FALSE)
+    }
+})
+
+# ---------------------------------------------------------------------------
+# Set Bioconductor repositories
+#
+# This ensures that install.packages() can find Bioconductor packages
+# without requiring users to call BiocManager::install() explicitly.
+# The repository list includes both CRAN and Bioconductor repositories.
+# ---------------------------------------------------------------------------
+local({
+    bioc_ver <- Sys.getenv("BIOC_VERSION")
+    if (nzchar(bioc_ver) && requireNamespace("BiocManager", quietly = TRUE)) {
+        options(
+            repos = BiocManager::repositories(),
+            BiocManager.check_repositories = FALSE
+        )
+    }
+})
+
+# ---------------------------------------------------------------------------
+# Set default number of compilation jobs
+#
+# When compiling R packages from source, use multiple cores. In HPC
+# environments, SLURM_CPUS_PER_TASK or similar variables indicate
+# the allocated core count.
+# ---------------------------------------------------------------------------
+local({
+    ncpus <- Sys.getenv("SLURM_CPUS_PER_TASK", unset = NA)
+    if (is.na(ncpus)) ncpus <- Sys.getenv("NSLOTS", unset = NA)
+    if (is.na(ncpus)) ncpus <- Sys.getenv("PBS_NUM_PPN", unset = NA)
+    if (is.na(ncpus)) ncpus <- as.character(min(parallel::detectCores(), 4L))
+    options(Ncpus = as.integer(ncpus))
+})
+
+# ---------------------------------------------------------------------------
+# HTTPUserAgent — identify this R installation to package repositories
+#
+# Some mirrors serve binary packages when they detect the platform from
+# the user agent string. This ensures correct binary matching.
+# ---------------------------------------------------------------------------
+options(
+    HTTPUserAgent = sprintf(
+        "R/%s R (%s)",
+        getRversion(),
+        paste(getRversion(), R.version$platform, R.version$arch, R.version$os)
+    )
+)

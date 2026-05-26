@@ -1,0 +1,155 @@
+##############################################################################
+# GitHub Actions: Build and Test Bioconductor HPC Container
+#
+# This workflow:
+#   1. Builds the Docker image
+#   2. Runs CLI tests (R, Rscript, BiocManager, packages)
+#   3. Verifies RStudio Desktop binary presence
+#   4. Checks shared library dependencies
+#
+# It does NOT test GUI functionality (no X11 in CI).
+#
+# Triggers:
+#   - Push to main branch
+#   - Pull requests to main
+#   - Manual dispatch (workflow_dispatch)
+##############################################################################
+
+name: Build and Test
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - 'LICENSE'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      bioc_version:
+        description: 'Bioconductor version'
+        required: false
+        default: '3.21'
+      r_version:
+        description: 'R version'
+        required: false
+        default: '4.5.0'
+
+env:
+  IMAGE_NAME: bioconductor-hpc
+  BIOC_VERSION: ${{ github.event.inputs.bioc_version || '3.21' }}
+  R_VERSION: ${{ github.event.inputs.r_version || '4.5.0' }}
+
+jobs:
+  build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: ${{ env.IMAGE_NAME }}:${{ env.BIOC_VERSION }}
+          build-args: |
+            R_VERSION=${{ env.R_VERSION }}
+            BIOC_VERSION=${{ env.BIOC_VERSION }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test - R version
+        run: |
+          docker run --rm ${{ env.IMAGE_NAME }}:${{ env.BIOC_VERSION }} \
+            R --version
+
+      - name: Test - Rscript basic
+        run: |
+          docker run --rm ${{ env.IMAGE_NAME }}:${{ env.BIOC_VERSION }} \
+            Rscript -e "cat('R is working\n'); stopifnot(1+1 == 2)"
+
+      - name: Test - BiocManager version
+        run: |
+          docker run --rm ${{ env.IMAGE_NAME }}:${{ env.BIOC_VERSION }} \
+            Rscript -e "
+              library(BiocManager)
+              v <- as.character(BiocManager::version())
+              cat('Bioconductor version:', v, '\n')
+              stopifnot(v == '${{ env.BIOC_VERSION }}')
+            "
+
+      - name: Test - Core Bioconductor packages
+        run: |
+          docker run --rm ${{ env.IMAGE_NAME }}:${{ env.BIOC_VERSION }} \
+            Rscript -e "
+              for (pkg in c('BiocGenerics', 'S4Vectors', 'IRanges',
+                            'GenomicRanges', 'GenomeInfoDb', 'AnnotationDbi',
+                            'BiocParallel', 'Biobase')) {
+                library(pkg, character.only = TRUE)
+                cat(pkg, ': OK\n')
+              }
+            "
+
+      - name: Test - CRAN packages
+        run: |
+          docker run --rm ${{ env.IMAGE_NAME }}:${{ env.BIOC_VERSION }} \
+            Rscript -e "
+              for (pkg in c('tidyverse', 'data.table', 'devtools', 'rmarkdown')) {
+                library(pkg, character.only = TRUE)
+                cat(pkg, ': OK\n')
+              }
+            "
+
+      - name: Test - RStudio Desktop binary
+        run: |
+          docker run --rm ${{ env.IMAGE_NAME }}:${{ env.BIOC_VERSION }} \
+            bash -c "
+              test -x /usr/lib/rstudio/rstudio && echo 'RStudio binary: OK' || exit 1
+              test -x /usr/local/bin/launch-rstudio && echo 'Launcher script: OK' || exit 1
+            "
+
+      - name: Test - RStudio shared libraries
+        run: |
+          docker run --rm ${{ env.IMAGE_NAME }}:${{ env.BIOC_VERSION }} \
+            bash -c "
+              MISSING=\$(ldd /usr/lib/rstudio/rstudio 2>&1 | grep 'not found' || true)
+              if [ -n \"\$MISSING\" ]; then
+                echo 'Missing shared libraries:'
+                echo \"\$MISSING\"
+                exit 1
+              fi
+              echo 'All shared libraries resolved: OK'
+            "
+
+      - name: Test - Library paths configured
+        run: |
+          docker run --rm ${{ env.IMAGE_NAME }}:${{ env.BIOC_VERSION }} \
+            Rscript -e "
+              paths <- .libPaths()
+              cat('Library paths:\n')
+              cat(paste(' ', paths), sep = '\n')
+              cat('\n')
+            "
+
+      - name: Test - Locale
+        run: |
+          docker run --rm ${{ env.IMAGE_NAME }}:${{ env.BIOC_VERSION }} \
+            Rscript -e "
+              loc <- Sys.getlocale('LC_CTYPE')
+              cat('Locale:', loc, '\n')
+              stopifnot(grepl('UTF-8', loc))
+            "
+
+      - name: Image size
+        run: |
+          docker images ${{ env.IMAGE_NAME }}:${{ env.BIOC_VERSION }} \
+            --format "Image size: {{.Size}}"

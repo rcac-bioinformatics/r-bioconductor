@@ -1,0 +1,54 @@
+#%Module1.0
+########################################################################
+# Example modulefile for Bioconductor HPC Container
+#
+# This is a READY-TO-USE modulefile with default paths. For production,
+# use install_module.sh to generate a modulefile from templates with
+# site-specific paths substituted.
+#
+# Installation:
+#   cp modulefiles/bioconductor /apps/modulefiles/bioconductor/3.21
+#   Or: ./scripts/install_module.sh
+########################################################################
+
+proc ModulesHelp { } {
+    puts stderr "Bioconductor 3.21 with R 4.5.0 and RStudio Desktop"
+    puts stderr ""
+    puts stderr "Commands: R, Rscript, rstudio, bioc-shell"
+    puts stderr ""
+    puts stderr "Package libraries:"
+    puts stderr "  User: ~/R/x86_64-pc-linux-gnu-library/4.5"
+    puts stderr "  Site: /apps/biocontainers/extras/r-package-site-library/4.5-bioconductor"
+}
+
+module-whatis "Bioconductor 3.21 with R 4.5.0 and RStudio Desktop for HPC"
+
+conflict bioconductor
+conflict R
+
+set image_path "/apps/biocontainers/images/bioconductor-hpc-3.21.sif"
+set bind_paths "/apps/biocontainers/extras,/scratch"
+
+setenv BIOC_VERSION    "3.21"
+setenv R_VERSION       "4.5.0"
+setenv R_VERSION_SHORT "4.5"
+setenv R_LIBS_USER     "$env(HOME)/R/x86_64-pc-linux-gnu-library/4.5"
+setenv R_LIBS_SITE     "/apps/biocontainers/extras/r-package-site-library/4.5-bioconductor"
+setenv QT_X11_NO_MITSHM "1"
+setenv QT_QPA_PLATFORM  "xcb"
+
+if { [info exists env(USER)] } {
+    setenv TMPDIR "/scratch/$env(USER)/tmp"
+}
+
+set apptainer_exec "apptainer exec --bind $bind_paths $image_path"
+
+set-alias R        "$apptainer_exec R"
+set-alias Rscript  "$apptainer_exec Rscript"
+set-alias rstudio  "$apptainer_exec launch-rstudio"
+set-alias bioc-shell "$apptainer_exec bash"
+
+if { [module-info mode load] } {
+    puts stderr "Bioconductor 3.21 loaded (R 4.5.0, RStudio Desktop)"
+    puts stderr "  Commands: R, Rscript, rstudio, bioc-shell"
+}
